@@ -41,6 +41,37 @@ const UpscaleTargetDefs = {
 }
 
 /**
+ * @enum {number}
+ */
+export const DebugRenderTarget = {
+    None: 0,
+    NormalsOrMask: 1,
+    FinalRender: 2,
+    DirectionsRender: 3,
+    BounceData1: 4,
+    BounceData2: 5,
+    BounceData3: 6,
+    BounceData4: 7,
+    BounceData5: 8,
+    BounceData6: 9,
+    BounceData7: 10,
+    FresnelRender: 11
+}
+
+const RenderTargetToIndexMap = {
+    [DebugRenderTarget.BounceData1]: 0,
+    [DebugRenderTarget.BounceData2]: 1,
+    [DebugRenderTarget.BounceData3]: 2,
+    [DebugRenderTarget.BounceData4]: 3,
+    [DebugRenderTarget.BounceData5]: 4,
+    [DebugRenderTarget.BounceData6]: 5,
+    [DebugRenderTarget.BounceData7]: 6,
+    [DebugRenderTarget.FresnelRender]: 1,
+    [DebugRenderTarget.FinalRender]: 0,
+    [DebugRenderTarget.DirectionsRender]: 0,
+}
+
+/**
  * @typedef {Object} UpscaleOptions
  * @property {UpscaleMethod} upscaleMethod
  * @property {UpscaleTarget} upscaleTarget
@@ -70,6 +101,20 @@ const DefaultRendererOptions = {
     bounceCount: 4
 }
 
+/**
+ * @param {any} trueResult
+ * @param {any} falseResult
+ * @param  {...boolean} conditions
+ */
+const evaluateConditions = (trueResult, falseResult, ...conditions) => {
+    for(const condition of conditions)
+    {
+        if(!condition)
+            return falseResult;
+    }
+    return trueResult;
+}
+
 
 export class TwoPassRefractionRenderer
 {
@@ -94,8 +139,86 @@ export class TwoPassRefractionRenderer
         this.renderTarget = null;
         /** @type {MeshUpscaleMaterial} */
         this.upscaleMaterial = null;
-        this.updateOptions(rendererOptions);
+        /** @type {boolean} */
+        this.savedAutoClear = renderer.autoClear;
+        /** @type {DebugRenderTarget} */
+        this.debugRenderTarget = DebugRenderTarget.None;
+        /** @type {number} */
+        this.debugRenderTargetIndex = 0;
+        /** @type {THREE.Scene} */
+        this.debugScene = new THREE.Scene();
+
         renderer.autoClear = false;
+        this.updateOptions(rendererOptions);
+    }
+
+    /** @param {DebugRenderTarget} target */
+    setDebugRenderTarget(target)
+    {
+        const previousRenderTarget = this.debugRenderTarget;
+        const upscaleTarget = this.rendererOptions.upscaleOptions.upscaleTarget;
+        const targetIndex = RenderTargetToIndexMap[target];
+        if(targetIndex !== undefined)
+            this.debugRenderTargetIndex = targetIndex;
+        else if(target === DebugRenderTarget.NormalsOrMask)
+        {
+            if(upscaleTarget === UpscaleTarget.RefractedDirections || upscaleTarget === UpscaleTarget.FinalRender)
+                this.debugRenderTargetIndex = 1;
+            else if(upscaleTarget === UpscaleTarget.RefractedDirectionsWithFresnelRender)
+                this.debugRenderTargetIndex = 2;
+            else if(upscaleTarget === UpscaleTarget.RefractedDirectionsWithBounceData)
+                this.debugRenderTargetIndex = this.rendererOptions.bounceCount + 1;
+        }
+        switch(target)
+        {
+            case DebugRenderTarget.None:
+            case DebugRenderTarget.NormalsOrMask:
+                this.debugRenderTarget = target;
+            break;
+
+            case DebugRenderTarget.FinalRender:
+                this.debugRenderTarget = evaluateConditions(DebugRenderTarget.FinalRender, DebugRenderTarget.None, upscaleTarget === UpscaleTarget.FinalRender);
+            break;
+
+            case DebugRenderTarget.DirectionsRender:
+                this.debugRenderTarget = evaluateConditions(DebugRenderTarget.DirectionsRender, DebugRenderTarget.None, upscaleTarget === UpscaleTarget.RefractedDirections);
+            break;
+
+            case DebugRenderTarget.BounceData1:
+            case DebugRenderTarget.BounceData2:
+            case DebugRenderTarget.BounceData3:
+            case DebugRenderTarget.BounceData4:
+            case DebugRenderTarget.BounceData5:
+            case DebugRenderTarget.BounceData6:
+            case DebugRenderTarget.BounceData7:
+                const bounceCount = target - DebugRenderTarget.BounceData1 + 1;
+                this.debugRenderTarget = evaluateConditions(target, DebugRenderTarget.None, upscaleTarget === UpscaleTarget.RefractedDirectionsWithBounceData && bounceCount <= this.rendererOptions.bounceCount);
+            break;
+
+            case DebugRenderTarget.FresnelRender:
+                this.debugRenderTarget = evaluateConditions(DebugRenderTarget.FresnelRender, DebugRenderTarget.None, upscaleTarget === UpscaleTarget.RefractedDirectionsWithFresnelRender); 
+            break;
+
+            default:
+                this.debugRenderTarget = DebugRenderTarget.None;
+            break;
+        }
+        if(previousRenderTarget !== this.debugRenderTarget)
+        {
+            if(this.debugRenderTarget === DebugRenderTarget.None)
+            {
+                this.renderer.setSize(this.originalRenderSize.x, this.originalRenderSize.y);
+            }
+            else
+            {
+                this.renderer.setSize(this.lowResRenderSize.x, this.lowResRenderSize.y);
+            }
+        }
+    }
+
+    unsetDebugRenderTarget()
+    {
+        this.setDebugRenderTarget(DebugRenderTarget.None);
     }
 
     /**
@@ -117,9 +240,12 @@ export class TwoPassRefractionRenderer
         }   
         /** @type {Object.<string, any>} */
         this.defineArray = this.getDefineArray();
+        const savedRenderTarget = this.debugRenderTarget;
+        this.setDebugRenderTarget(DebugRenderTarget.None);
         this.createRenderTarget();
         this.updateMaterials();
         this.updateUpscaleMaterial();
+        this.setDebugRenderTarget(savedRenderTarget);
     }
 
     updateUpscaleMaterial()
@@ -180,7 +306,8 @@ export class TwoPassRefractionRenderer
             minFilter: textureFilter,
             magFilter: textureFilter,
             format: THREE.RGBAFormat,
-            count: count
+            count: count,
+            colorSpace: THREE.SRGBColorSpace
         });
     }
 
@@ -202,15 +329,26 @@ export class TwoPassRefractionRenderer
             if(!child.isMesh)
                 return;
             const materialArray = Array.isArray(child.material) ? child.material : [child.material];
-            for(const material of materialArray)
+            for(const possibleRefractiveMaterial of materialArray)
             {
-                if(!material.isRefractiveMaterial)
+                if(!possibleRefractiveMaterial.isRefractiveMaterial)
                     continue;
-                if(this.refractiveMaterials.has(material))
+                if(this.refractiveMaterials.has(possibleRefractiveMaterial))
                     continue;
-                this.refractiveMaterials.add(material);
-                material.saveDefines();
-                material.addToDefines(this.defineArray);
+                this.refractiveMaterials.add(possibleRefractiveMaterial);
+                possibleRefractiveMaterial.saveDefines();
+                possibleRefractiveMaterial.addToDefines(this.defineArray);
+                const savedCallback = child.onBeforeRender;
+                const overrideCallback = (renderer, scene, camera, geometry, material, group) => {
+                    if(savedCallback)
+                        savedCallback(renderer, scene, camera, geometry, material, group);
+                    if(material.isRefractiveMaterial)
+                        material.setupForMesh(child);
+                    else if(material.isUpscaleMaterial)
+                        material.setupFromRefractiveMaterial(possibleRefractiveMaterial);
+                };
+                child.savedCallback = savedCallback;
+                child.onBeforeRender = overrideCallback;
             }
         });
         this.refractiveObjects.add(obj);
@@ -245,20 +383,26 @@ export class TwoPassRefractionRenderer
      */
     render(scene, camera)
     {
+        const debugRendering = this.debugRenderTarget !== DebugRenderTarget.None;
         let savedRatio = this.renderer.getPixelRatio();
-        this.renderer.setRenderTarget(this.renderTarget);
-        this.renderer.setPixelRatio(this.rendererOptions.lowResFactor);
-        this.renderer.clear();
         this.beforeRefractionRender(scene);
+        this.renderer.setRenderTarget(this.renderTarget);
+        this.renderer.setPixelRatio(debugRendering ? 1 : this.rendererOptions.lowResFactor);
+        this.renderer.clear();
         this.renderer.render(scene, camera);
         this.renderer.setRenderTarget(null);
-        this.renderer.setPixelRatio(savedRatio);
+        this.renderer.setPixelRatio(debugRendering ? 1 : savedRatio);
         this.renderer.clear();
         this.upscaleMaterial.uniforms.lowResTexture.value = this.renderTarget.textures[0];
         this.upscaleMaterial.uniforms.normalOrMask.value = this.renderTarget.textures[1];
         this.upscaleMaterial.uniformsNeedUpdate = true;
         this.beforeUpscaleRender(scene);
-        this.renderer.render(scene, camera);
+        if(!debugRendering)
+            this.renderer.render(scene, camera);
+        else {
+            this.debugScene.background = this.renderTarget.textures[this.debugRenderTargetIndex];
+            this.renderer.render(this.debugScene, camera);
+        }
     }
 
     /**
@@ -266,6 +410,8 @@ export class TwoPassRefractionRenderer
      */
     beforeRefractionRender(scene)
     {
+        this.savedEnvMap = scene.background;
+        scene.background = null;
         this.visibilities = {};
         for(const obj of scene.children)
         {
@@ -288,7 +434,7 @@ export class TwoPassRefractionRenderer
                                 material.visible = false;
                             }
                         }
-                        else if(!materialOrArray.isRefractiveMaterial)
+                        else if(!materialOrArray.isRefractiveMaterial && !materialOrArray.isUpscaleMaterial)
                         {
                             this.visibilities[child] = child.visible;
                             child.visible = false;
@@ -300,7 +446,7 @@ export class TwoPassRefractionRenderer
         }
         for(const obj of this.refractiveObjects)
         {
-            if(this.objectMaterialMaps)
+            if(this.objectMaterialMaps[obj])
                 applyMaterialMap(obj, this.objectMaterialMaps[obj], new THREE.MeshBasicMaterial({ color: 0x000000 }));
             const visibility = this.visibilities[obj];
             if(visibility !== undefined)
@@ -313,6 +459,7 @@ export class TwoPassRefractionRenderer
      */
     beforeUpscaleRender(scene)
     {
+        scene.background = this.savedEnvMap;
         this.objectMaterialMaps = {};
         for(const obj of scene.children)
         {

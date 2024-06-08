@@ -26,11 +26,12 @@ void main()
         vec4 col = texture(lowResTexture, fragCoord);
     #else
         #ifdef PRESERVE_NORMALS
-            vec4 col = samplePixelNormal(lowResTexture, normalOrMask, fragCoord, localNormal, 0.9);
+            vec4 col = samplePixelNormal(lowResTexture, normalOrMask, fragCoord, localNormal, NORMAL_THRESHOLD);
         #else
             vec4 col = samplePixelMask(lowResTexture, normalOrMask, fragCoord);
         #endif
     #endif
+    col.rgb = pow(col.rgb, vec3(1.0 / 2.2));
     fragColor = col;
 }
 `};

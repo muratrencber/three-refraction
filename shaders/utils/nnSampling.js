@@ -38,7 +38,8 @@ vec4 samplePixelNormal(in sampler2D lowResTexture, in sampler2D normal, vec2 scr
     {
         vec4 colorSample = texture(lowResTexture, coords[i]);
         vec4 normalSample = texture(normal, coords[i]);
-        if(normalSample.a > 0.1)
+        float normalSize = length(normalSample.xyz);
+        if(normalSize < 0.001)
         {
             continue;
         }

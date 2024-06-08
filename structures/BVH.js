@@ -1,5 +1,5 @@
-import { maxTextureSize } from "../Capabilities";
-import bvhModule from "./wasm/bvh/bvh";
+import { Capabilities } from "../Capabilities";
+import bvhModule from "../wasm/bvh/bvh";
 import * as THREE from 'three';
 
 let bvhWASM = null;
@@ -35,8 +35,33 @@ export class BVH
     }
 
     /**
+     * 
+     * @param {Promise<THREE.Object3D>} modelPromise 
+     * @param {string} url
+     * @returns {Promise<{model: THREE.Object3D, bvh: BVH}>}
+     */
+    async loadWithModel(modelPromise, url)
+    {
+        const model = await modelPromise;
+        await this.load(url);
+        return {model, bvh: this};
+    }
+
+    /**
+     * @param {Promise<THREE.Object3D>} modelPromise 
+     * @param {number} [maxPrimsPerLeaf=2] maxPrimsPerLeaf
+     * @returns {Promise<{model: THREE.Object3D, bvh: BVH}>}
+     */
+    async loadModelAndConstruct(modelPromise, maxPrimsPerLeaf = 2)
+    {
+        const model = await modelPromise;
+        await this.construct(model, maxPrimsPerLeaf);
+        return {model, bvh: this};
+    }
+
+    /**
      * @param {string} url 
-     * @returns {Promise<void>} */
+     * @returns {Promise<BVH>} */
     async load(url)
     {
         const response = await fetch(url);
@@ -45,7 +70,7 @@ export class BVH
         const nodeCount = headerInfo[0];
         const primCount = headerInfo[1];
 
-        const linearNodesStart = 8;
+        const linearNodesStart = 2;
         const linearNodesEnd = linearNodesStart + nodeCount * 2;
         const boundsDataEnd = linearNodesEnd + nodeCount * 6;
         const primDataEnd = boundsDataEnd + primCount * 9;
@@ -53,15 +78,19 @@ export class BVH
         this.linearData = new Int32Array(bytes.slice(linearNodesStart * 4, linearNodesEnd * 4));
         this.boundsData = new Float32Array(bytes.slice(linearNodesEnd * 4, boundsDataEnd * 4));
         this.primData = new Float32Array(bytes.slice(boundsDataEnd * 4, primDataEnd * 4));
+
+        return this;
     }
     
     createTextureFor(data, propCount, format, internalFormat, type)
     {
         const texLen = data.length / propCount;
-        const height = maxTextureSize ? Math.ceil(texLen / maxTextureSize) : 1;
-        const width = maxTextureSize ? Math.min(texLen, maxTextureSize) : texLen;
+        const height = Capabilities.maxTextureSize ? Math.ceil(texLen / Capabilities.maxTextureSize) : 1;
+        const width = Capabilities.maxTextureSize ? Math.min(texLen, Capabilities.maxTextureSize) : texLen;
         const texture = new THREE.DataTexture(data, width, height, format, type);
         texture.internalFormat = internalFormat;
+        texture.needsUpdate = true;
+        return texture;
     }
 
     /** @returns {{linearData: THREE.DataTexture, boundsData: THREE.DataTexture, primData: THREE.DataTexture}} */
@@ -110,13 +139,13 @@ export class BVH
      * @param {THREE.Object3D} target
      * @param {number} maxPrimsPerLeaf 
      */
-    async construct(target, maxPrimsPerLeaf = 1)
+    async construct(target, maxPrimsPerLeaf = 2)
     {
         await loadBVHModule();
         const traingles = this.getObjectTriangles(target);
         const triLoc = bvhWASM._malloc(traingles.length * 4);
-        bvhWASM.HEAPF32.set(target, triLoc >> 2);
-        const bvhLoc = constructBVH(triLoc, target.length / 9, maxPrimsPerLeaf);
+        bvhWASM.HEAPF32.set(traingles, triLoc >> 2);
+        const bvhLoc = constructBVH(triLoc, traingles.length / 9, maxPrimsPerLeaf);
         const fpointer = bvhLoc >> 2;
         const dat = bvhWASM.HEAP32.subarray(fpointer, fpointer + 2);
         const nodeCount = dat[0];

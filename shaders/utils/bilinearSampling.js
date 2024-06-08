@@ -31,10 +31,10 @@ vec4 samplePixelMask(in sampler2D lowResTexture, in sampler2D mask, vec2 screenC
     vec3 topLeftNormal = normalize(topLeftNormalMaskData.xyz * 2.0 - 1.0);
     vec3 bottomRightNormal = normalize(bottomRightNormalMaskData.xyz * 2.0 - 1.0);
 
-    float bottomLeftMask = (1.0 - bottomLeftNormalMaskData.a) * (dot(bottomLeftNormal, fragNormal) > threshold ? 1. : 0.);
-    float topRightMask = (1.0 - topRightNormalMaskData.a) * (dot(topRightNormal, fragNormal) > threshold ? 1. : 0.);
-    float topLeftMask = (1.0 - topLeftNormalMaskData.a) * (dot(topLeftNormal, fragNormal) > threshold ? 1. : 0.);
-    float bottomRightMask = (1.0 - bottomRightNormalMaskData.a) * (dot(bottomRightNormal, fragNormal) > threshold ? 1. : 0.);
+    float bottomLeftMask = (dot(bottomLeftNormal, fragNormal) > threshold ? 1. : 0.);
+    float topRightMask = (dot(topRightNormal, fragNormal) > threshold ? 1. : 0.);
+    float topLeftMask = (dot(topLeftNormal, fragNormal) > threshold ? 1. : 0.);
+    float bottomRightMask = (dot(bottomRightNormal, fragNormal) > threshold ? 1. : 0.);
 #else
     float bottomLeftMask = 1.0 - texture(mask, bottomLeft).a;
     float topRightMask = 1.0 - texture(mask, topRight).a;

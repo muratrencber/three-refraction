@@ -47,11 +47,11 @@ intersectionResult intersectTriangle(ray r, triangle t)
     {
         return result;
     }
-    float t = dot(edge2, qvec) * invDet;
-    result.t = t;
-    result.point = r.origin + t * r.direction;
+    float resT = dot(edge2, qvec) * invDet;
+    result.t = resT;
+    result.point = r.origin + resT * r.direction;
     result.normal = normalize(cross(edge1, edge2));
-    result.hit = 1;
+    result.hit = resT >= 0.0 ? 1 : 0;
     return result;
 }
 #endif

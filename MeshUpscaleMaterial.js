@@ -14,5 +14,11 @@ export class MeshUpscaleMaterial extends THREE.RawShaderMaterial
             defines: defines,
             glslVersion: THREE.GLSL3
         });
+        this.isUpscaleMaterial = true;
+    }
+
+    setupFromRefractiveMaterial(refractiveMaterial)
+    {
+
     }
 }

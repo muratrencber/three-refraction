@@ -6,15 +6,15 @@ import { exampleFragmentGLSL } from "./shaders/exampleLowRes/exampleFragment";
 export class MeshRefractiveTestMaterial extends MeshRefractiveMaterial
 {
     /**
-     * @param {THREE.ShaderMaterialParameters} params 
+     * @param {import("./MeshRefractiveMaterial").RefractiveMaterialParameters} params 
      */
     constructor(params)
     {
         super(
+            {},
+            params,
             exampleVertexGLSL.code,
             exampleFragmentGLSL.code,
-            {},
-            params
         );
     }
 }

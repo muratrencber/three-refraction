@@ -68,7 +68,7 @@ intersectionResult rayCast(vec3 rayOrigin, vec3 rayDir, float tMin, float tMax) 
     res.hit = 0;
     vec3 invDir = 1.0 / rayDir;
     int negDir[3] = int[3](invDir.x < 0.0 ? 1 : 0, invDir.y < 0.0 ? 1 : 0, invDir.z < 0.0 ? 1 : 0);
-    int stack[32];
+    int stack[64];
     int visitOffset = 0;
     int currentIndex = 0;
     int iterationIndex = 0;

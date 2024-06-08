@@ -53,10 +53,10 @@ vec4 samplePixelMask(in sampler2D lowResTexture, in sampler2D mask, vec2 screenC
     vec3 normal2 = normalize(normalData2.xyz * 2.0 - 1.0);
     vec3 normal3 = normalize(normalData3.xyz * 2.0 - 1.0);
 
-    float maskData3 = (1.0 - normalData3.a) * (dot(normal3, fragNormal) > threshold ? 1. : 0.);
-    float maskData2 = (1.0 - normalData2.a) * (dot(normal2, fragNormal) > threshold ? 1. : 0.);
-    float maskData1 = (1.0 - normalData1.a) * (dot(normal1, fragNormal) > threshold ? 1. : 0.);
-    float maskData0 = (1.0 - normalData0.a) * (dot(normal0, fragNormal) > threshold ? 1. : 0.);
+    float maskData3 = (dot(normal3, fragNormal) > threshold ? 1. : 0.);
+    float maskData2 = (dot(normal2, fragNormal) > threshold ? 1. : 0.);
+    float maskData1 = (dot(normal1, fragNormal) > threshold ? 1. : 0.);
+    float maskData0 = (dot(normal0, fragNormal) > threshold ? 1. : 0.);
 
     float sx1 = maskData3 == 0. ? 1. : maskData2 == 0. ? 0. : sx;
     float sx2 = maskData1 == 0. ? 1. : maskData0 == 0. ? 0. : sx;

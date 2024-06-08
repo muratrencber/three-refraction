@@ -7,6 +7,9 @@ import { bilinearSamplingGLSL } from './shaders/utils/bilinearSampling';
 import { bvhUtilsGLSL } from './shaders/utils/bvhUtils';
 import { nnSamplingGLSL } from './shaders/utils/nnSampling';
 import * as THREE from 'three';
+import { primitiveIntersectionsGLSL } from './shaders/utils/primitiveIntersections';
+import { voxelGridUtilsGLSL } from './shaders/utils/voxelGridUtils';
+import { svoUtilsGLSL } from './shaders/utils/svoUtils';
 
 let shaderSetupDone = false;
 
@@ -18,7 +21,10 @@ const shaderData = [
     bvhUtilsGLSL,
     nnSamplingGLSL,
     bilinearSamplingGLSL,
-    bicubicSamplingGLSL
+    bicubicSamplingGLSL,
+    primitiveIntersectionsGLSL,
+    voxelGridUtilsGLSL,
+    svoUtilsGLSL
 ];
 
 export const setupShaders = () => {

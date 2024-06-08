@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "ml-matrix": "^6.11.0",
     "three": "^0.164.1"
   },
   "type": "module"
