@@ -120,7 +120,7 @@ void main() {
         float fresnelStrength = fresnel_schlick_tir(r0, incident_cos, critical_cos);
 #if defined(TARGET_REFRACTED_DIRECTIONS_WITH_FRESNEL_RENDER) || defined(TARGET_FINAL_RENDER)
         vec3 targetNormal = dot(newDir, res.normal) < 0. ? res.normal : -res.normal;
-        vec3 fresnelRefractDir = refract(newDir, res.normal, ior / 1.);
+        vec3 fresnelRefractDir = refract(newDir, targetNormal, ior / 1.);
         float bounceFresnelStrength = fresnelRefractDir == vec3(0.) ? 0. : (1.0 - fresnelStrength) * currentStrength;
         reflectStrength = bounceFresnelStrength;
         worldReflectedDirection = (mWorldMatrix * vec4(fresnelRefractDir, 1.0)).xyz;
