@@ -3,6 +3,8 @@ import { applyMaterial, applyMaterialMap, getMaterialMap } from './MaterialUtils
 import { MeshRefractiveMaterial } from './MeshRefractiveMaterial';
 import { MeshUpscaleMaterial } from './MeshUpscaleMaterial';
 import { setupShaders } from './ShaderSetup';
+import { xbrUpscaleVertexGLSL } from './shaders/upscale/xbrUpscaleVertex';
+import { xbrUpscaleFragmentGLSL } from './shaders/upscale/xbrUpscaleFragment';
 
 /**
  * @enum {number}
@@ -76,6 +78,7 @@ const RenderTargetToIndexMap = {
  * @property {UpscaleMethod} upscaleMethod
  * @property {UpscaleTarget} upscaleTarget
  * @property {boolean} normalFiltering
+ * @property {boolean} xbr4xSupported
  * @property {number} normalThreshold
  * @property {THREE.TextureFilter} hwFiltering
  */
@@ -83,6 +86,7 @@ const RenderTargetToIndexMap = {
 const DefaultUpscaleOptions = {
     upscaleMethod: UpscaleMethod.Bilinear,
     upscaleTarget: UpscaleTarget.FinalRender,
+    xbr4xSupported: true,
     hwFiltering: THREE.NearestFilter,
     normalFiltering: true,
     normalThreshold: 0.85
@@ -137,6 +141,10 @@ export class TwoPassRefractionRenderer
         this.refractiveMaterials = new Set();
         /** @type {THREE.WebGLRenderTarget} */
         this.renderTarget = null;
+        /** @type {THREE.WebGLRenderTarget} */
+        this.xbrRenderTarget = null;
+        /** @type {THREE.WebGLRenderTarget} */
+        this.xbr4xRenderTarget = null;
         /** @type {MeshUpscaleMaterial} */
         this.upscaleMaterial = null;
         /** @type {boolean} */
@@ -150,6 +158,18 @@ export class TwoPassRefractionRenderer
 
         renderer.autoClear = false;
         this.updateOptions(rendererOptions);
+
+        this.quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        this.quadMaterial = new THREE.RawShaderMaterial({
+            vertexShader: xbrUpscaleVertexGLSL.code,
+            fragmentShader: xbrUpscaleFragmentGLSL.code,
+            glslVersion: THREE.GLSL3
+        });
+        this.quadScene = new THREE.Scene();
+        const quadGeometry = new THREE.PlaneGeometry(2, 2);
+        const quadMesh = new THREE.Mesh(quadGeometry, this.quadMaterial);
+        this.quadCamera.translateZ(1);
+        this.quadScene.add(quadMesh);
     }
 
     /** @param {DebugRenderTarget} target */
@@ -286,19 +306,31 @@ export class TwoPassRefractionRenderer
     {
         let count = 2;
         let textureFilter = THREE.NearestFilter;
-        if(this.rendererOptions.upscaleOptions.upscaleTarget === UpscaleTarget.RefractedDirectionsWithBounceData)
+        let xbrTargetCount = 0;
+        if(this.rendererOptions.upscaleOptions.upscaleTarget === UpscaleTarget.RefractedDirectionsWithBounceData){
             count = this.rendererOptions.bounceCount + 1;
-        else if(this.rendererOptions.upscaleOptions.upscaleTarget === UpscaleTarget.RefractedDirectionsWithFresnelRender)
+            xbrTargetCount = this.rendererOptions.bounceCount;
+        }
+        else if(this.rendererOptions.upscaleOptions.upscaleTarget === UpscaleTarget.RefractedDirectionsWithFresnelRender){
             count = 3;
-        else if(this.rendererOptions.upscaleOptions.upscaleTarget === UpscaleTarget.FinalRender)
+            xbrTargetCount = 1;
+        }
+        else if(this.rendererOptions.upscaleOptions.upscaleTarget === UpscaleTarget.FinalRender){
             count = 2;
+        }
         if(this.rendererOptions.upscaleOptions.upscaleMethod === UpscaleMethod.Hardware)
         {
             count -= 1;
             textureFilter = this.rendererOptions.upscaleOptions.hwFiltering;
         }
+
         if(this.renderTarget)
             this.renderTarget.dispose();
+        if(this.xbrRenderTarget)
+            this.xbrRenderTarget.dispose();
+        if(this.xbr4xRenderTarget)
+            this.xbr4xRenderTarget.dispose();
+        
         this.originalRenderSize = this.renderer.getSize(new THREE.Vector2());
         this.originalRenderSize.multiplyScalar(this.renderer.getPixelRatio());
         this.lowResRenderSize = new THREE.Vector2(Math.floor(this.renderer.domElement.width * this.rendererOptions.lowResFactor), Math.floor(this.renderer.domElement.height * this.rendererOptions.lowResFactor));
@@ -309,6 +341,36 @@ export class TwoPassRefractionRenderer
             count: count,
             colorSpace: THREE.SRGBColorSpace
         });
+
+        this.xbr4xRenderTarget = null;
+        this.xbrRenderTarget = null;
+
+        if(xbrTargetCount > 0)
+        {
+            this.xbrUpscaleSize = new THREE.Vector2(this.lowResRenderSize.x * 2, this.lowResRenderSize.y * 2);
+            this.xbrUpscaleSize.x = Math.min(upscaledSize.x, this.originalRenderSize.x);
+            this.xbrUpscaleSize.y = Math.min(upscaledSize.y, this.originalRenderSize.y);
+            this.xbrRenderTarget = new THREE.WebGLRenderTarget(this.xbrUpscaleSize.x, this.xbrUpscaleSize.y, {
+                minFilter: THREE.NearestFilter,
+                magFilter: THREE.NearestFilter,
+                format: THREE.RGBAFormat,
+                count: xbrTargetCount,
+                colorSpace: THREE.SRGBColorSpace
+            });
+            if(this.xbrUpscaleSize.distanceTo(this.originalRenderSize) > 0.2 && this.rendererOptions.upscaleOptions.xbr4xSupported)
+            {
+                this.xbr4xUpscaleSize = new THREE.Vector2(this.lowResRenderSize.x * 4, this.lowResRenderSize.y * 4);
+                this.xbr4xUpscaleSize.x = Math.min(upscaledSize.x, this.originalRenderSize.x);
+                this.xbr4xUpscaleSize.y = Math.min(upscaledSize.y, this.originalRenderSize.y);
+                this.xbr4xRenderTarget = new THREE.WebGLRenderTarget(this.xbr4xUpscaleSize.x, this.xbr4xUpscaleSize.y, {
+                    minFilter: THREE.NearestFilter,
+                    magFilter: THREE.NearestFilter,
+                    format: THREE.RGBAFormat,
+                    count: xbrTargetCount,
+                    colorSpace: THREE.SRGBColorSpace
+                });
+            }
+        }
     }
 
     updateMaterials()
@@ -398,7 +460,13 @@ export class TwoPassRefractionRenderer
         this.upscaleMaterial.uniformsNeedUpdate = true;
         this.beforeUpscaleRender(scene);
         if(!debugRendering)
+        {
+            if(this.rendererOptions.upscaleOptions.upscaleMethod === UpscaleMethod.XBR)
+            {
+
+            }
             this.renderer.render(scene, camera);
+        }
         else {
             this.debugScene.background = this.renderTarget.textures[this.debugRenderTargetIndex];
             this.renderer.render(this.debugScene, camera);

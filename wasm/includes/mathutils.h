@@ -4,8 +4,16 @@
 struct Vec3
 {
     float x, y, z;
+
+    Vec3(): x(0), y(0), z(0) {}
+    Vec3(float x, float y, float z): x(x), y(y), z(z) {}
     
     float operator[](int i) const
+    {
+        return i == 0 ? x : (i == 1 ? y : z);
+    }
+
+    float& operator[](int i)
     {
         return i == 0 ? x : (i == 1 ? y : z);
     }
@@ -64,6 +72,55 @@ struct Vec3
         return v;
     }
 
+    void add(const Vec3 other)
+    {
+        x += other.x;
+        y += other.y;
+        z += other.z;
+    }
+
+    void sub(const Vec3 other)
+    {
+        x -= other.x;
+        y -= other.y;
+        z -= other.z;
+    }
+
+    void add(float x, float y, float z)
+    {
+        this->x += x;
+        this->y += y;
+        this->z += z;
+    }
+
+    void add(float value)
+    {
+        this->x += value;
+        this->y += value;
+        this->z += value;
+    }
+
+    void sub(float x, float y, float z)
+    {
+        this->x -= x;
+        this->y -= y;
+        this->z -= z;
+    }
+
+    void sub(float value)
+    {
+        this->x -= value;
+        this->y -= value;
+        this->z -= value;
+    }
+
+    void zero()
+    {
+        x = 0;
+        y = 0;
+        z = 0;
+    }
+
     float dot(const Vec3& other) const
     {
         return x * other.x + y * other.y + z * other.z;
@@ -78,6 +135,25 @@ struct Vec3
     {
         float l = length();
         return (*this) / l;
+    }
+
+    void min(float x, float y, float z)
+    {
+        this->x = this->x < x ? this->x : x;
+        this->y = this->y < y ? this->y : y;
+        this->z = this->z < z ? this->z : z;
+    }
+
+    void max(float x, float y, float z)
+    {
+        this->x = this->x > x ? this->x : x;
+        this->y = this->y > y ? this->y : y;
+        this->z = this->z > z ? this->z : z;
+    }
+
+    float maxComponent() const
+    {
+        return x > y ? (x > z ? x : z) : (y > z ? y : z);
     }
 };
 

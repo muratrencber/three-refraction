@@ -188,13 +188,25 @@ const initVoxelArr = (tris, size, minPoint, voxelSize, contouringMethod, onVoxel
 
     return voxels;
 }
+const intAsFloat = (num) => {
+    const intView = new Int32Array(1);
+    const floatView = new Float32Array(intView.buffer);
+    intView[0] = num;
+    return floatView[0];
+}
 
+const floatAsInt = (num) => {
+    const intView = new Int32Array(1);
+    const floatView = new Float32Array(intView.buffer);
+    floatView[0] = num;
+    return intView[0];
+}
 /**
  * 
  * @param {Float32Array} triarr 
  * @param {number} gridSize
  * @param {ContouringMethod} contouringMethod
- * @returns {{minPoint: THREE.Vector3, size: [number, number, number], voxelSize: number, voxels: Voxel[][][]}}
+ * @returns {{minPoint: THREE.Vector3, size: [number, number, number], voxelSize: number, voxelData: Float32Array}}
  */
 export const voxelizeMesh = (triarr, gridSize, contouringMethod) => {
     const tris = f32arrtotriangles(triarr);
@@ -222,7 +234,25 @@ export const voxelizeMesh = (triarr, gridSize, contouringMethod) => {
     maxPoint = minPoint.clone().add(new THREE.Vector3(xsize, ysize, zsize).multiplyScalar(voxelSize));
 
     const voxels = initVoxelArr(tris, [xsize, ysize, zsize], minPoint, voxelSize, contouringMethod, null);
-    return {minPoint, size: [xsize, ysize, zsize], voxelSize, voxels};
+    const voxelData = new Float32Array(xsize * ysize * zsize * 4);
+    for(let z = 0; z < zsize; z++)
+    {
+        for(let y = 0; y < ysize; y++)
+        {
+            for(let x = 0; x < xsize; x++)
+            {
+                const voxel = voxels[x][y][z];
+                const idx = (z * ysize * xsize + y * xsize + x) * 4;
+                voxelData[idx] = voxel.normal.x;
+                voxelData[idx + 1] = voxel.normal.y;
+                voxelData[idx + 2] = voxel.normal.z;
+                const isFilled = voxel.childCount > 0 ? 1 : 0;
+                const edgeMask = voxel.edgeMask << 1;
+                voxelData[idx + 3] = intAsFloat(isFilled | edgeMask);
+            }
+        }
+    }
+    return {minPoint, size: [xsize, ysize, zsize], voxelSize, voxelData};
 }
 
 /**

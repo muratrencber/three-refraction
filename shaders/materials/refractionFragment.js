@@ -101,6 +101,8 @@ void main() {
 
     int earlyout = 0;
 
+    float reflectStrength = 0.;
+
     for(int i = 0; i < targetBounceCount; i++) {
         if(currentStrength < 0.1) {
             break;
@@ -117,8 +119,10 @@ void main() {
         incident_cos = max(dot(-newDir, res.normal), dot(newDir, res.normal));
         float fresnelStrength = fresnel_schlick_tir(r0, incident_cos, critical_cos);
 #if defined(TARGET_REFRACTED_DIRECTIONS_WITH_FRESNEL_RENDER) || defined(TARGET_FINAL_RENDER)
+        vec3 targetNormal = dot(newDir, res.normal) < 0. ? res.normal : -res.normal;
         vec3 fresnelRefractDir = refract(newDir, res.normal, ior / 1.);
         float bounceFresnelStrength = fresnelRefractDir == vec3(0.) ? 0. : (1.0 - fresnelStrength) * currentStrength;
+        reflectStrength = bounceFresnelStrength;
         worldReflectedDirection = (mWorldMatrix * vec4(fresnelRefractDir, 1.0)).xyz;
         vec4 contenderFresnel = sampleEnvMap(worldReflectedDirection);
         fresnelColor += contenderFresnel * bounceFresnelStrength;
@@ -134,9 +138,6 @@ void main() {
     vec4 finalColor = sampleEnvMap(newDir);
     out2 = out1;
     out1 = mix(finalColor, fresnelColor, 1. - currentStrength);
-    if(earlyout == 1) {
-        out1 = vec4(1., 0., 0., 1.);
-    }
 #elif defined(TARGET_REFRACTED_DIRECTIONS)
     worldReflectedDirection = normalize((mWorldMatrix * vec4(newDir, 1.0)).xyz);
     out2 = out1;

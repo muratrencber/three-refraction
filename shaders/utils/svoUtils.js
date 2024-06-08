@@ -266,7 +266,7 @@ intersectionResult castRay(ray r)
 
             // Restore parent voxel from the stack.
             ChildDescriptor curr = get_cd(0);
-            for(int i = MAX_DEPTH - 1; i > scale; i--)
+            for(int i = MAX_DEPTH - 1; i > max(scale, 0); i--)
             {
                 int chx = floatBitsToInt(pos.x) >> i;
                 int chy = floatBitsToInt(pos.y) >> i;

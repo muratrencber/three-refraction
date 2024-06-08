@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { ContouringMethod } from "./VoxelSettings";
 import { Voxel, voxelizeMesh } from "./temp/gridVoxelization";
+import { VoxelUtils } from './VoxelUtilsCPP';
 
 let voxelGridWASM = null;
 let constructVoxelGrid = null;
@@ -93,30 +94,9 @@ export class VoxelGrid
         this.method = floatAsInt(headerInfo[0]);
         this.gridMin = new THREE.Vector3(headerInfo[1], headerInfo[2], headerInfo[3]);
         this.gridSize = [floatAsInt(headerInfo[4]), floatAsInt(headerInfo[5]), floatAsInt(headerInfo[6])];
-        const voxelInfo = new Float32Array(bytes, 32, this.gridSize[0] * this.gridSize[1] * this.gridSize[2] * 5);
+        this.voxelData = new Float32Array(bytes, 32, this.gridSize[0] * this.gridSize[1] * this.gridSize[2] * 4);
         this.voxelSize = headerInfo[7];
-        this.voxels = [];
-        for(let x = 0; x < this.gridSize[0]; x++)
-        {
-            this.voxels.push([]);
-            for(let y = 0; y < this.gridSize[1]; y++)
-            {
-                this.voxels[x].push([]);
-                for(let z = 0; z < this.gridSize[2]; z++)
-                {
-                    const idx = (x * this.gridSize[1] * this.gridSize[2] + y * this.gridSize[2] + z) * 5;
-                    const normal = new THREE.Vector3(voxelInfo[idx], voxelInfo[idx + 1], voxelInfo[idx + 2]);
-                    const childCount = floatAsInt(voxelInfo[idx + 3]);
-                    const edgeMask = floatAsInt(voxelInfo[idx + 4]);
-                    const vx = new Voxel();
-                    vx.normal = normal;
-                    vx.childCount = childCount;
-                    vx.edgeMask = edgeMask;
-                    this.voxels[x][y].push(vx);
-                }
-            }
-        }
-        this.createGridData(this.voxels);
+        this.createGridData(this.voxelData);
     }
 
     /** @returns {{gridData: THREE.Data3DTexture, gridMin: THREE.Vector3, gridSize: THREE.Vector3, voxelSize: number}} */
@@ -166,57 +146,20 @@ export class VoxelGrid
         /** @type {ContouringMethod} */
         this.method = contouringMethod;
         const triarr = this.getObjectTriangles(target);
-        const vxres = voxelizeMesh(triarr, gridSize, contouringMethod);
+        const vxres = await VoxelUtils.createVoxelGrid(triarr, gridSize, contouringMethod);
         this.gridMin = vxres.minPoint;
         this.gridSize = [...vxres.size];
         this.voxelSize = vxres.voxelSize;
-        /** @type {Voxel[][][]} */
-        this.voxels = vxres.voxels;
-        this.createGridData(vxres.voxels);
+        /** @type {Float32Array} */
+        this.voxelData = vxres.voxelData;
+        this.createGridData(vxres.voxelData);
     }
 
-    /** @param {Voxel[][][]} voxelArr  */
-    createGridData(voxelArr)
+    /** @param {Float32Array} voxelData  */
+    createGridData(voxelData)
     {
-        let filledCount = 0;
-        let edgedCount = 0;
-        const pointsData = [];
-        const debugPointsData = [];
-        
-        for(let x = 0; x < this.gridSize[0]; x++)
-        {
-            debugPointsData.push([]);
-            for(let y = 0; y < this.gridSize[1]; y++)
-            {
-                debugPointsData[x].push([]);
-                for(let z = 0; z < this.gridSize[2]; z++)
-                {
-                    debugPointsData[x][y].push([0,0,0,0]);
-                }
-            }
-        }
-        for(let z = 0; z < this.gridSize[2]; z++)
-        {
-            for(let y = 0; y < this.gridSize[1]; y++)
-            {
-                for(let x = 0; x < this.gridSize[0]; x++)
-                {
-                    const vx = voxelArr[x][y][z];
-                    const isEmptyFlag = vx.childCount > 0 ? 1 : 0;
-                    if(vx.childCount > 0) filledCount++;
-                    if(vx.edgeMask != 0) edgedCount++;
-                    const edgeMask = vx.edgeMask << 1;
-                    const wValue = isEmptyFlag | edgeMask;
-                    const wValueFloat = intAsFloat(wValue);
-                    pointsData.push(vx.normal.x, vx.normal.y, vx.normal.z, wValueFloat);
-                    debugPointsData[x][y][z] = [vx.normal.x, vx.normal.y, vx.normal.z, wValueFloat];
-                }
-            }
-        }
-        this.debugPointsData = debugPointsData;
-        const gridArr = new Float32Array(pointsData);
         if(this.gridData) this.gridData.dispose();
-        this.gridData = new THREE.Data3DTexture(gridArr, this.gridSize[0], this.gridSize[1], this.gridSize[2]);
+        this.gridData = new THREE.Data3DTexture(voxelData, this.gridSize[0], this.gridSize[1], this.gridSize[2]);
         this.gridData.internalFormat = 'RGBA32F';
         this.gridData.type = THREE.FloatType;
         this.gridData.format = THREE.RGBAFormat;
@@ -237,24 +180,7 @@ export class VoxelGrid
         headerData[5] = intAsFloat(this.gridSize[1]);
         headerData[6] = intAsFloat(this.gridSize[2]);
         headerData[7] = this.voxelSize;
-        const voxelData = new Float32Array(this.gridSize[0] * this.gridSize[1] * this.gridSize[2] * 5);
-        for(let x = 0; x < this.gridSize[0]; x++)
-        {
-            for(let y = 0; y < this.gridSize[1]; y++)
-            {
-                for(let z = 0; z < this.gridSize[2]; z++)
-                {
-                    const vx = this.voxels[x][y][z];
-                    const idx = (x * this.gridSize[1] * this.gridSize[2] + y * this.gridSize[2] + z) * 5;
-                    voxelData[idx] = vx.normal.x;
-                    voxelData[idx + 1] = vx.normal.y;
-                    voxelData[idx + 2] = vx.normal.z;
-                    voxelData[idx + 3] = intAsFloat(vx.childCount);
-                    voxelData[idx + 4] = intAsFloat(vx.edgeMask);
-                }
-            }
-        }
-        const fullBlob = new Blob([headerData, voxelData]);
+        const fullBlob = new Blob([headerData, this.voxelData]);
         return fullBlob;
     }
 
