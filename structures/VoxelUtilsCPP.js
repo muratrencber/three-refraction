@@ -1,6 +1,6 @@
 import voxelUtilsModule from "../wasm/voxelGrid/voxelUtils";
 import { ContouringMethod } from "./VoxelSettings";
-import { voxelizeMesh } from "./temp/gridVoxelization";
+import { voxelizeMesh, voxelizeMeshSVO } from "./temp/gridVoxelization";
 import * as THREE from 'three';
 
 const intAsFloat = (num) => {
@@ -21,6 +21,7 @@ export class VoxelUtils
 {
     static module;
     static createVoxelGridAvgNormalsCPP;
+    static createSVOAvgNormalsCPP;
 
     static async loadModule()
     {
@@ -28,6 +29,7 @@ export class VoxelUtils
             return await Promise.resolve(VoxelUtils.module);
         VoxelUtils.module = await voxelUtilsModule();
         VoxelUtils.createVoxelGridAvgNormalsCPP = VoxelUtils.module.cwrap('constructVoxelGrid', 'number', ['number', 'number', 'number']);
+        VoxelUtils.createSVOAvgNormalsCPP = VoxelUtils.module.cwrap('constructSVO', 'number', ['number', 'number', 'number']);
     }
 
     /**
@@ -58,5 +60,36 @@ export class VoxelUtils
         VoxelUtils.module._free(triLoc);
         VoxelUtils.module._free(dataLoc);
         return {minPoint, size, voxelSize, voxelData};
+    }
+
+    /**
+     * 
+     * @param {Float32Array} triarr 
+     * @param {number} depth 
+     * @param {ContouringMethod} contouringMethod 
+     * @returns {Promise<{min: THREE.Vector3, max: THREE.Vector3, nodeCount: number, voxelData: Float32Array}>}
+     */
+    static async createSVO(triarr, depth, contouringMethod)
+    {
+        await VoxelUtils.loadModule();
+        if(contouringMethod != ContouringMethod.AverageNormals)
+        {
+            const res = await Promise.resolve(voxelizeMeshSVO(triarr, depth, contouringMethod));
+        }
+        const triLoc = VoxelUtils.module._malloc(triarr.length * 4);
+        VoxelUtils.module.HEAPF32.set(triarr, triLoc >> 2);
+        const dataLoc = VoxelUtils.createSVOAvgNormalsCPP(triLoc, triarr.length / 9, depth);
+        const fpointer = dataLoc >> 2;
+        const dat = VoxelUtils.module.HEAPF32.subarray(fpointer, fpointer + 8);
+        const minPoint = new THREE.Vector3(dat[0], dat[1], dat[2]);
+        const maxPoint = new THREE.Vector3(dat[3], dat[4], dat[5]);
+        const size = floatAsInt(dat[6]);
+        const dataSize = floatAsInt(dat[7]);
+        const voxelDataStart = fpointer + 8;
+        const voxelDataEnd = voxelDataStart + dataSize * 4;
+        const voxelData = VoxelUtils.module.HEAPF32.slice(voxelDataStart, voxelDataEnd);
+        VoxelUtils.module._free(triLoc);
+        VoxelUtils.module._free(dataLoc);
+        return {min: minPoint, max: maxPoint, nodeCount: dataSize, voxelData};
     }
 }

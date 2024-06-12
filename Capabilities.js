@@ -3,17 +3,18 @@ export class Capabilities
 {
     static maxTextureSize = null;
     static max3DTextureSize = null;
+    static capabilitiesSet = false;
 
     /** 
      * @param {THREE.WebGLRenderer} renderer
     */
     static setCapabilitiesFromRenderer(renderer)
     {
-        if (!capabilitiesSet)
+        if (!Capabilities.capabilitiesSet)
         {
             Capabilities.maxTextureSize = renderer.capabilities.maxTextureSize;
-            Capabilities.max3DTextureSize = maxTextureSize / 2;
-            capabilitiesSet = true;
+            Capabilities.max3DTextureSize = Capabilities.maxTextureSize / 2;
+            Capabilities.capabilitiesSet = true;
         }
     }
 

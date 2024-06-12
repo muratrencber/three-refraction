@@ -5,7 +5,7 @@ export const bvhUtilsGLSL = {name: "bvhUtils", code: `
 #include <primitiveIntersections>
 #define EPSILON 0.0001
 
-uniform highp isampler2D lbvh;
+uniform sampler2D lbvh;
 uniform sampler2D primitives;
 uniform sampler2D bounds;
 
@@ -18,12 +18,12 @@ struct bvhNode {
 };
 
 bvhNode getNode(int index) {
-    highp ivec2 data = texelFetch(lbvh, ivec2(index, 0), 0).xy;
+    vec2 data = texelFetch(lbvh, ivec2(index, 0), 0).xy;
     vec3 min = texelFetch(bounds, ivec2(index * 2, 0), 0).xyz;
     vec3 max = texelFetch(bounds, ivec2(index * 2 + 1, 0), 0).xyz;
-    int primOrSecondChild = data.x;
-    int nPrims = data.y >> 2;
-    int axis = data.y & 0x3;
+    int primOrSecondChild = floatBitsToInt(data.x);
+    int nPrims = floatBitsToInt(data.y) >> 2;
+    int axis = floatBitsToInt(data.y) & 0x3;
     return bvhNode(min, max, primOrSecondChild, nPrims, axis);
 }
 

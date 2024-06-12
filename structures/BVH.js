@@ -19,7 +19,7 @@ export class BVH
 {
     constructor()
     {
-        /** @type {Int32Array} */
+        /** @type {Float32Array} */
         this.linearData = null;
         /** @type {Float32Array} */
         this.boundsData = null;
@@ -75,7 +75,7 @@ export class BVH
         const boundsDataEnd = linearNodesEnd + nodeCount * 6;
         const primDataEnd = boundsDataEnd + primCount * 9;
 
-        this.linearData = new Int32Array(bytes.slice(linearNodesStart * 4, linearNodesEnd * 4));
+        this.linearData = new Float32Array(bytes.slice(linearNodesStart * 4, linearNodesEnd * 4));
         this.boundsData = new Float32Array(bytes.slice(linearNodesEnd * 4, boundsDataEnd * 4));
         this.primData = new Float32Array(bytes.slice(boundsDataEnd * 4, primDataEnd * 4));
 
@@ -99,7 +99,7 @@ export class BVH
         if(this.linearDataTexture) this.linearDataTexture.dispose();
         if(this.boundsDataTexture) this.boundsDataTexture.dispose();
         if(this.primDataTexture) this.primDataTexture.dispose();
-        this.linearDataTexture = this.createTextureFor(this.linearData, 2, THREE.RGIntegerFormat, "RG32I", THREE.IntType);
+        this.linearDataTexture = this.createTextureFor(this.linearData, 2, THREE.RGFormat, "RG32F", THREE.FloatType);
         this.boundsDataTexture = this.createTextureFor(this.boundsData, 3, THREE.RGBFormat, "RGB32F", THREE.FloatType);
         this.primDataTexture = this.createTextureFor(this.primData, 3, THREE.RGBFormat, "RGB32F", THREE.FloatType);
         return {
@@ -156,7 +156,7 @@ export class BVH
         const boundsDataEnd = linearDataEnd + nodeCount * 6;
         const primDataEnd = boundsDataEnd + primCount * 9;
 
-        this.linearData = bvhWASM.HEAP32.slice(linearDataStart, linearDataEnd);
+        this.linearData = bvhWASM.HEAPF32.slice(linearDataStart, linearDataEnd);
         this.boundsData = bvhWASM.HEAPF32.slice(linearDataEnd, boundsDataEnd);
         this.primData = bvhWASM.HEAPF32.slice(boundsDataEnd, primDataEnd);
 

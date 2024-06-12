@@ -10,6 +10,8 @@ import * as THREE from 'three';
 import { primitiveIntersectionsGLSL } from './shaders/utils/primitiveIntersections';
 import { voxelGridUtilsGLSL } from './shaders/utils/voxelGridUtils';
 import { svoUtilsGLSL } from './shaders/utils/svoUtils';
+import { fresnelGLSL } from './shaders/includes/fresnel';
+import { envMapUtilsGLSL } from './shaders/includes/envMapUtils';
 
 let shaderSetupDone = false;
 
@@ -24,7 +26,9 @@ const shaderData = [
     bicubicSamplingGLSL,
     primitiveIntersectionsGLSL,
     voxelGridUtilsGLSL,
-    svoUtilsGLSL
+    svoUtilsGLSL,
+    fresnelGLSL,
+    envMapUtilsGLSL
 ];
 
 export const setupShaders = () => {

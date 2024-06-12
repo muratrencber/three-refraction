@@ -3,34 +3,35 @@ import { ContouringMethod } from '../VoxelSettings';
 import Matrix, { EigenvalueDecomposition } from 'ml-matrix';
 import { QEF, solveQEF } from './QEF';
 import {SVO} from './SVO';
+import { Capabilities } from '../../Capabilities';
 
 export const edgeOffsets = [
-    [[0,0,0],[0,0,1]],
-    [[0,1,0],[0,1,1]],
-    [[1,0,0],[1,0,1]],
-    [[1,1,0],[1,1,1]],
-    [[0,0,0],[1,0,0]],
-    [[0,1,0],[1,1,0]],
-    [[0,0,1],[1,0,1]],
-    [[0,1,1],[1,1,1]],
-    [[0,0,0],[0,1,0]],
-    [[1,0,0],[1,1,0]],
-    [[0,0,1],[0,1,1]],
-    [[1,0,1],[1,1,1]]];
+    [[0,0,0],[0,0,1]], //0
+    [[0,1,0],[0,1,1]], //1
+    [[1,0,0],[1,0,1]], //2
+    [[1,1,0],[1,1,1]], //3
+    [[0,0,0],[1,0,0]], //4
+    [[0,1,0],[1,1,0]],  //5
+    [[0,0,1],[1,0,1]], //6
+    [[0,1,1],[1,1,1]], //7
+    [[0,0,0],[0,1,0]], //8
+    [[1,0,0],[1,1,0]], //9
+    [[0,0,1],[0,1,1]], //10
+    [[1,0,1],[1,1,1]]]; //11
     
-const edgeNeighbours = [
-[[0,0,0] , [-1,0,0], [-1,-1,0], [0,0,0] , [0,-1,0] , [-1,-1,0]],
+export const edgeNeighbours = [
+[[-1,0,0], [0,0,0] ,  [-1,-1,0], [0,-1,0] ,[0,0,0] ,  [-1,-1,0]],
 [[0,1,0] , [-1,1,0], [-1,0,0] , [0,1,0] , [0,0,0]  , [-1,0,0]],
-[[1,0,0] , [0,0,0] , [0,-1,0] , [1,0,0] , [1,-1,0] , [0,-1,0]],
-[[1,1,0] , [0,1,0] , [0,0,0]  , [1,1,0] , [1,0,0]  , [0,0,0]],
-[[0,0,0] , [0,0,-1], [0,-1,-1], [0,0,0] , [0,-1,0] , [0,-1,-1]],
-[[0,1,0] , [0,1,-1], [0,0,-1] , [0,1,0] , [0,0,0]  , [0,0,-1]],
-[[0,0,1] , [0,0,0] , [0,-1,0] , [0,0,1] , [0,-1,1] , [0,-1,0]],
-[[0,1,1] , [0,1,0] , [0,0,0]  , [0,1,1] , [0,0,1]  , [0,0,0]],
-[[0,0,-1], [0,0,0] , [-1,0,0] , [0,0,-1], [-1,0,-1], [-1,0,0]],
-[[1,0,-1], [1,0,0] , [0,0,0]  , [1,0,-1], [0,0,-1] , [0,0,0]],
-[[0,0,0] , [0,0,1] , [-1,0,1] , [0,0,0] , [-1,0,0] , [-1,0,1]],
-[[1,0,0] , [1,0,1] , [0,0,1]  , [1,0,0] , [0,0,0]  , [0,0,1]]];
+[[1,0,0] , [0,0,0] , [0,-1,0] , [1,-1,0] ,[1,0,0] ,  [0,-1,0]],
+[[0,1,0] ,[1,1,0] ,  [0,0,0]  , [1,1,0] , [1,0,0]  , [0,0,0]],
+[[0,0,0] , [0,0,-1], [0,-1,-1], [0,-1,0] , [0,0,0] ,  [0,-1,-1]],
+[[0,1,0] , [0,1,-1], [0,0,-1] , [0,0,0]  ,[0,1,0] ,  [0,0,-1]],
+[[0,0,1] , [0,0,0] , [0,-1,0] , [0,-1,1] ,[0,0,1] ,  [0,-1,0]],
+[[0,1,1] , [0,1,0] , [0,0,0]  , [0,0,1]  ,[0,1,1] ,  [0,0,0]],
+[[0,0,0] ,[0,0,-1],  [-1,0,0] , [0,0,-1],[-1,0,-1],  [-1,0,0]],
+[[1,0,0] ,[1,0,-1],  [0,0,0]  , [0,0,-1] ,[1,0,-1],  [0,0,0]],
+[[0,0,1] ,[0,0,0] ,  [-1,0,1] , [-1,0,0] ,[0,0,0] ,  [-1,0,1]],
+[[1,0,0] , [1,0,1] , [0,0,1]  , [0,0,0]  ,[1,0,0] ,  [0,0,1]]];
 
 /**
  * @param {Float32Array} arr
@@ -148,16 +149,19 @@ const initVoxelArr = (tris, size, minPoint, voxelSize, contouringMethod, onVoxel
                                 const ep1to2 = ep2.clone().sub(ep1).normalize();
                                 let eRay = new THREE.Ray(ep1, ep1to2);
                                 let intersection = eRay.intersectTriangle(tri.a, tri.b, tri.c, true, new THREE.Vector3());
+                                let flip = false;
                                 if(!intersection || intersection.distanceTo(ep1) > voxelSize) {
                                     eRay = new THREE.Ray(ep2, ep1to2.clone().negate());
                                     intersection = eRay.intersectTriangle(tri.a, tri.b, tri.c, true, new THREE.Vector3());
+                                    flip = true;
                                     if(!intersection || intersection.distanceTo(ep2) > voxelSize) continue;
                                 };
                                 const ep1toTri = intersection.clone().sub(eRay.origin);
                                 if(ep1toTri.length() > voxelSize) continue;
                                 const normal = tri.getNormal(new THREE.Vector3()).multiplyScalar(-1);
                                 const edgeMask = 1 << edgeidx;
-                                voxel.edgeMask |= edgeMask;
+                                const flipMask = flip ? (edgeMask << 12) : 0;
+                                voxel.edgeMask |= edgeMask | flipMask;
                                 const translatedIntersection = intersection.clone().sub(vCenter);
                                 voxel.qef.addIntersection(translatedIntersection, normal, edgeidx);
                             }
@@ -260,7 +264,7 @@ export const voxelizeMesh = (triarr, gridSize, contouringMethod) => {
  * @param {Float32Array} triarr 
  * @param {number} svoDepth
  * @param {ContouringMethod} contouringMethod
- * @returns {SVO}
+ * @returns {{min: THREE.Vector3, max: THREE.Vector3, nodeCount: number, voxelData: Float32Array}}
  */
 export const voxelizeMeshSVO = (triarr, svoDepth, contouringMethod) => {
     const tris = f32arrtotriangles(triarr);
@@ -293,6 +297,21 @@ export const voxelizeMeshSVO = (triarr, svoDepth, contouringMethod) => {
         if(voxel.childCount == 0) return;
         svo.insertVoxel(center, voxel.normal);
     });
-    return svo;
+    const linearSVOs = svo.linearize();
+    const nodeCount = linearSVOs.length;
+    const float32arr = new Float32Array(nodeCount * 4);
+    for(let i = 0; i < nodeCount; i++) {
+        const node = linearSVOs[i];
+        const cmBits = node.childMask & 0xFF;
+        const leafBit = node.isLeaf ? 0x100 : 0;
+        const offsetBits = (node.childOffset & 0x7FFFFF) << 9;
+        const packedInt = cmBits | leafBit | offsetBits;
+        float32arr[i * 4] = intAsFloat(packedInt);
+        float32arr[i * 4 + 1] = node.avgNormal.x;
+        float32arr[i * 4 + 2] = node.avgNormal.y;
+        float32arr[i * 4 + 3] = node.avgNormal.z;
+    }
+    //{min: THREE.Vector3, max: THREE.Vector3, nodeCount: number, voxelData: Float32Array}
+    return {min: minPoint, max: maxPoint, nodeCount, voxelData: float32arr};
 };
 

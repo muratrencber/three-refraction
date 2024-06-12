@@ -4,6 +4,7 @@ import { Voxel, voxelizeMesh } from "./temp/gridVoxelization";
 import { SVO } from "./temp/SVO";
 import { voxelizeMeshSVO } from "./temp/gridVoxelization";
 import { Capabilities } from '../Capabilities';
+import { VoxelUtils } from './VoxelUtilsCPP';
 
 let voxelGridWASM = null;
 let constructVoxelGrid = null;
@@ -44,7 +45,7 @@ const floatAsInt = (num) => {
 
 export class SparseVoxelOctree
 {
-    constructor()
+    constructor(isFullGrid = false)
     {
         /** @type {THREE.Vector3} */
         this.gridMin = new THREE.Vector3();
@@ -98,13 +99,14 @@ export class SparseVoxelOctree
     /** @returns {{svoMin: THREE.Vector3, svoMax: THREE.Vector3, svoDepth: number, svoTexSize: [number, number], svoData: THREE.DataTexture}} */
     getUniforms()
     {
-        return {
+        const data = {
             svoMin: this.gridMin,
             svoMax: this.gridMax,
             svoDepth: this.svoDepth,
-            svoTexSize: this.svoDataTextureSize,
-            svoData: this.svoDataTexture
+            svoData: this.svoDataTexture,
+            svoTexSize: this.svoDataTextureSize
         };
+        return data;
     }
 
     /**
@@ -143,36 +145,28 @@ export class SparseVoxelOctree
         /** @type {ContouringMethod} */
         this.method = contouringMethod;
         const triarr = this.getObjectTriangles(target);
-        const svo = voxelizeMeshSVO(triarr, svoDepth, contouringMethod);
+        const svo = await VoxelUtils.createSVO(triarr, svoDepth, contouringMethod);
         this.gridMin = svo.min;
         this.gridMax = svo.max;
-        this.svo = svo;
-        this.svoDepth = svo.depth;
-        this.createGridData(svo);
+        this.svoDepth = svoDepth;
+        this.createGridData(svo.voxelData, svo.nodeCount);
     }
 
-    /** @param {SVO} svo  */
-    createGridData(svo)
+    /** 
+     * @param {Float32Array} voxelData
+     * @param {number} nodeCount
+      */
+    createGridData(voxelData, nodeCount)
     {
-        const linearSVOs = svo.linearize();
-        const nodeCount = linearSVOs.length;
         const maxTexSize = Math.floor((Capabilities.maxTextureSize ?? 2048));
         const width = Math.min(maxTexSize, nodeCount);
         const height = Math.ceil(nodeCount / maxTexSize);
-        const elemCount = width * height;
-        const int32arr = new Float32Array(elemCount * 4);
-        for(let i = 0; i < nodeCount; i++) {
-            const node = linearSVOs[i];
-            const cmBits = node.childMask & 0xFF;
-            const leafBit = node.isLeaf ? 0x100 : 0;
-            const offsetBits = (node.childOffset & 0x7FFFFF) << 9;
-            const packedInt = cmBits | leafBit | offsetBits;
-            int32arr[i * 4] = intAsFloat(packedInt);
-            int32arr[i * 4 + 1] = node.avgNormal.x;
-            int32arr[i * 4 + 2] = node.avgNormal.y;
-            int32arr[i * 4 + 3] = node.avgNormal.z;
-        }
-        const tex = new THREE.DataTexture(int32arr, width, height, THREE.RGBAFormat, THREE.FloatType);
+        const desiredLength = width * height * 4;
+        const voxelDataLength = nodeCount * 4;
+        const requiredPadding = desiredLength - voxelDataLength;
+        const padding = new Float32Array(requiredPadding);
+        voxelData = Float32Array.from([...voxelData, ...padding]);
+        const tex = new THREE.DataTexture(voxelData, width, height, THREE.RGBAFormat, THREE.FloatType);
         tex.internalFormat = 'RGBA32F';
         tex.needsUpdate = true;
         this.svoDataTexture = tex;

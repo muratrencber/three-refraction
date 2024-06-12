@@ -20,8 +20,8 @@ export class MeshRefractiveSVOMaterial extends MeshRefractiveMaterial
         this.uniforms.svoMin = {value: null};
         this.uniforms.svoMax = {value: null};
         this.uniforms.svoDepth = {value: null};
-        this.uniforms.svoTexSize = {value: null};
         this.uniforms.svoData = {value: null};
+        this.uniforms.svoTexSize = {value: null};
         this.setSVO(svo);
     }
 
@@ -34,11 +34,8 @@ export class MeshRefractiveSVOMaterial extends MeshRefractiveMaterial
         /** @type {SparseVoxelOctree} */
         this.svo = svo;
         const dataTextures = svo.getUniforms();
-        this.uniforms.svoMin.value = dataTextures.svoMin;
-        this.uniforms.svoMax.value = dataTextures.svoMax;
-        this.uniforms.svoDepth.value = dataTextures.svoDepth;
-        this.uniforms.svoTexSize.value = dataTextures.svoTexSize;
-        this.uniforms.svoData.value = dataTextures.svoData;
+        for(const key in dataTextures)
+            this.uniforms[key].value = dataTextures[key];
         this.uniformsNeedUpdate = true;
     }
 }

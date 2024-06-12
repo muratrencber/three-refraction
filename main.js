@@ -9,6 +9,7 @@ import { DebugRenderTarget, TwoPassRefractionRenderer, UpscaleMethod, UpscaleTar
 import { BVH } from "./structures/BVH"
 import { SparseVoxelOctree } from "./structures/SparseVoxelOctree"
 import { VoxelGrid } from "./structures/VoxelGrid"
+import { ContouringMethod } from "./structures/VoxelSettings"
 
 export {
     MeshRefractiveBVHMaterial,
@@ -24,5 +25,6 @@ export {
     DebugRenderTarget,
     BVH,
     SparseVoxelOctree,
-    VoxelGrid
+    VoxelGrid,
+    ContouringMethod
 };

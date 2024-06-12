@@ -125,12 +125,7 @@ intersectionResult castRay(ray r)
     float orig_t_max = t_max;
 
     // Initialize the current voxel to the first child of the root.
-
-    vec4 cd = texelFetch(svoData, ivec2(0, 0), 0);
-    int cd_index = 0;
-    int cd_childMask = floatBitsToInt(cd.x) & 0xFF;
-    int cd_isLeaf = (floatBitsToInt(cd.x) >> 8) & 0x1;
-    int cd_childOffset = (floatBitsToInt(cd.x) >> 9) & 0x7FFFFF;
+    ChildDescriptor cd = get_cd(0);
     int             idx                 = 0;
     vec3            pos                   = vec3(1.0, 1.0, 1.0);
     int             scale               = MAX_DEPTH - 1;
@@ -145,6 +140,7 @@ intersectionResult castRay(ray r)
     int popCount = 0;
 
     int masked_idx = idx ^ octant_mask;
+    int stack[STACK_SZ];
 
     // Traverse voxels along the ray as long as the current voxel
     // stays within the octree.
@@ -153,7 +149,7 @@ intersectionResult castRay(ray r)
     {
         iter++;
 
-        if(cd_isLeaf == 1)
+        if(cd.isLeaf == 1)
         {
             res.hit = 1;
             break;
@@ -171,7 +167,7 @@ intersectionResult castRay(ray r)
         // and the active t-span is non-empty.
 
         int child_shift = idx ^ octant_mask; // permute child slots based on the mirroring
-        int child_masks = cd_childMask >> child_shift;
+        int child_masks = cd.childMask >> child_shift;
         if ((child_masks & 0x1) != 0 && t_min <= t_max)
         {
             // Terminate if the voxel is small enough.
@@ -194,30 +190,20 @@ intersectionResult castRay(ray r)
             {
                 // Terminate if the corresponding bit in the non-leaf mask is not set.
 
-                // PUSH
-                // Write current parent to the stack.
-                //stackIndex[scale] = cd_index;
-                //stackCMask[scale] = cd_childMask;
-                //stackCOffset[scale] = cd_childOffset;
-                //stackIsLeaf[scale] = cd_isLeaf;
-                //stackTMax[scale] = t_max;
                 h = tc_max;
 
                 // Find child descriptor corresponding to the current voxel.
-
                 int adjustedChildIdx = child_shift;
                 for(int i = 0; i < child_shift; i++)
                 {
-                    if((cd_childMask & (1 << i)) == 0)
+                    if((cd.childMask & (1 << i)) == 0)
                     {
                         adjustedChildIdx--;
                     }
                 }
-                cd_index = cd_index + cd_childOffset + adjustedChildIdx;
-                cd = texelFetch(svoData, ivec2(cd_index % svoTexSize.x, cd_index / svoTexSize.x), 0);
-                cd_childMask = floatBitsToInt(cd.x) & 0xFF;
-                cd_isLeaf = (floatBitsToInt(cd.x) >> 8) & 0x1;
-                cd_childOffset = (floatBitsToInt(cd.x) >> 9) & 0x7FFFFF;
+                stack[MAX_DEPTH - scale] = cd.index;
+                int cdIndex = cd.index + cd.childOffset + adjustedChildIdx;
+                cd = get_cd(cdIndex);
                 fetchCount++;
 
                 // Select child voxel that the ray enters first.
@@ -264,20 +250,18 @@ intersectionResult castRay(ray r)
             scale = ((floatBitsToInt(float(differing_bits)) >> 23) - 127); // position of the highest bit
             scale_exp2 = intBitsToFloat((scale - MAX_DEPTH + 127) << 23); // exp2f(scale - s_max)
 
-            // Restore parent voxel from the stack.
-            ChildDescriptor curr = get_cd(0);
-            for(int i = MAX_DEPTH - 1; i > max(scale, 0); i--)
-            {
-                int chx = floatBitsToInt(pos.x) >> i;
-                int chy = floatBitsToInt(pos.y) >> i;
-                int chz = floatBitsToInt(pos.z) >> i;
-                int ch = ((chx & 1) | ((chy & 1) << 1) | ((chz & 1) << 2)) ^ octant_mask;
-                curr = get_child_of(curr, ch);
-            }
-            cd_index = curr.index;
-            cd_childMask = curr.childMask;
-            cd_isLeaf = curr.isLeaf;
-            cd_childOffset = curr.childOffset;
+            //Restore parent voxel from the stack.
+            //ChildDescriptor curr = get_cd(0);
+            //for(int i = MAX_DEPTH - 1; i > max(scale, 0); i--)
+            //{
+            //    int chx = floatBitsToInt(pos.x) >> i;
+            //    int chy = floatBitsToInt(pos.y) >> i;
+            //    int chz = floatBitsToInt(pos.z) >> i;
+            //    int ch = ((chx & 1) | ((chy & 1) << 1) | ((chz & 1) << 2)) ^ octant_mask;
+            //    curr = get_child_of(curr, ch);
+            //}
+            //cd = curr;
+            cd = get_cd(stack[MAX_DEPTH - scale]);
 
             // Round cube position and extract child slot index.
 
@@ -290,10 +274,6 @@ intersectionResult castRay(ray r)
             idx  = (shx & 1) | ((shy & 1) << 1) | ((shz & 1) << 2);
 
 
-            float txn_corner = (pos.x - scale_exp2) * tx_coef - tx_bias;
-            float tyn_corner = (pos.y - scale_exp2) * ty_coef - ty_bias;
-            float tzn_corner = (pos.z - scale_exp2) * tz_coef - tz_bias;
-            float tcn_max = min(min(txn_corner, tyn_corner), tzn_corner);
             t_max = orig_t_max;
 
             // Prevent same parent from being stored again and invalidate cached child descriptor.
@@ -313,9 +293,9 @@ intersectionResult castRay(ray r)
     if ((octant_mask & 4) == 0) pos.z = 3.0f - scale_exp2 - pos.z;
 
     // Output results.
-    res.t = t_min;
+    res.t = t_min + scale_exp2 * 0.5;
     res.point = r.origin + r.direction * t_min;
-    res.normal = get_cd(cd_index).normal;
+    res.normal = cd.normal;
     return res;
 }
 

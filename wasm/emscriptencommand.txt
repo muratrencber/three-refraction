@@ -1,0 +1,3 @@
+emcc bvh.cpp -o bvh.js -s EXPORTED_FUNCTIONS='["_constructLinearBVH","_malloc","_free"]' -sEXPORTED_RUNTIME_METHODS='["ccall","cwrap"]' -s ALLOW_MEMORY_GROWTH=1 -s EXPORT_ES6=1 -sMODULARIZE -s EXPORT_NAME="bvhModule" -s MALLOC=emmalloc
+
+emcc voxelGrid.cpp -o voxelUtils.js -s EXPORTED_FUNCTIONS='["_constructSVO","_constructVoxelGrid","_malloc","_free"]' -sEXPORTED_RUNTIME_METHODS='["ccall","cwrap"]' -s ALLOW_MEMORY_GROWTH=1 -s EXPORT_ES6=1 -sMODULARIZE -s EXPORT_NAME="voxelUtils"

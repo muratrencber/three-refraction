@@ -33,7 +33,7 @@ const getBitsStr = (num, bitlen) => {
     return str;
 }
 
-const floatAsInt = (num) => {
+export const floatAsInt = (num) => {
     const intView = new Int32Array(1);
     const floatView = new Float32Array(intView.buffer);
     floatView[0] = num;

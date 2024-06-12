@@ -1,3 +1,5 @@
+#ifndef MATH_UTILS_H
+#define MATH_UTILS_H
 #define EPSILON 0.0001
 #include <cmath>
 
@@ -16,6 +18,20 @@ struct Vec3
     float& operator[](int i)
     {
         return i == 0 ? x : (i == 1 ? y : z);
+    }
+
+    void set(float number)
+    {
+        x = number;
+        y = number;
+        z = number;
+    }
+
+    void set(float x, float y, float z)
+    {
+        this->x = x;
+        this->y = y;
+        this->z = z;
     }
 
     Vec3 operator+(const Vec3& other) const
@@ -326,3 +342,4 @@ struct Triangle
         return result;
     }
 };
+#endif

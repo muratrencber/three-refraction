@@ -1,7 +1,10 @@
 #include "../includes/mathutils.h"
 #include "../includes/triangleIntersects.h"
+#include "../includes/svo.h"
 #include <cmath>
 #include <cstring>
+#include <queue>
+#include <iostream>
 
 template <typename T>
 T tripleMin(T a, T b, T c)
@@ -36,27 +39,19 @@ indexTriplet getIndices(Vec3 point, Vec3 minPoint, float voxelSize)
     Vec3 offset = point - minPoint;
     return {(int)std::floor(offset.x / voxelSize), (int)std::floor(offset.y / voxelSize), (int)std::floor(offset.z / voxelSize)};
 }
-extern "C"
+
+struct GridProperties
 {
-float* constructVoxelGrid(float* prims, int primCount, int size)
+    Vec3 min;
+    int* gridSize;
+    float voxelSize;
+};
+
+Voxel* initGrid(float* prims, int primCount, GridProperties props)
 {
-    Vec3 min(prims[0], prims[1], prims[2]);
-    Vec3 max = min;
-    for(int i = 1; i < primCount * 3; i++)
-    {
-        min.min(prims[i * 3 + 0], prims[i * 3 + 1], prims[i * 3 + 2]);
-        max.max(prims[i * 3 + 0], prims[i * 3 + 1], prims[i * 3 + 2]);
-    }
-    Vec3 extents = max - min;
-    float maxExtent = extents.maxComponent();
-    float voxelSize = maxExtent / (float)(size - 1);
-    min.sub(voxelSize / 2);
-    max.add(voxelSize / 2);
-    extents = max - min;
-    maxExtent = extents.maxComponent();
-    voxelSize = maxExtent / (float)(size);
-    int gridSize[3] = {(int)std::ceil(extents.x / voxelSize), (int)std::ceil(extents.y / voxelSize), (int)std::ceil(extents.z / voxelSize)};
-    max = min + Vec3(gridSize[0] * voxelSize, gridSize[1] * voxelSize, gridSize[2] * voxelSize);
+    int gridSize[3] = {props.gridSize[0], props.gridSize[1], props.gridSize[2]};
+    float voxelSize = props.voxelSize;
+    Vec3 min = props.min;
     Voxel* grid = new Voxel[gridSize[0] * gridSize[1] * gridSize[2]];
     int yMultiplier = gridSize[2];
     int xMultiplier = gridSize[1] * gridSize[2];
@@ -105,6 +100,31 @@ float* constructVoxelGrid(float* prims, int primCount, int size)
             }
         }
     }
+    return grid;
+}
+
+extern "C"
+{
+float* constructVoxelGrid(float* prims, int primCount, int size)
+{
+    Vec3 min(prims[0], prims[1], prims[2]);
+    Vec3 max = min;
+    for(int i = 1; i < primCount * 3; i++)
+    {
+        min.min(prims[i * 3 + 0], prims[i * 3 + 1], prims[i * 3 + 2]);
+        max.max(prims[i * 3 + 0], prims[i * 3 + 1], prims[i * 3 + 2]);
+    }
+    Vec3 extents = max - min;
+    float maxExtent = extents.maxComponent();
+    float voxelSize = maxExtent / (float)(size - 1);
+    min.sub(voxelSize / 2);
+    max.add(voxelSize / 2);
+    extents = max - min;
+    maxExtent = extents.maxComponent();
+    voxelSize = maxExtent / (float)(size);
+    int gridSize[3] = {(int)std::ceil(extents.x / voxelSize), (int)std::ceil(extents.y / voxelSize), (int)std::ceil(extents.z / voxelSize)};
+    max = min + Vec3(gridSize[0] * voxelSize, gridSize[1] * voxelSize, gridSize[2] * voxelSize);
+    Voxel* grid = initGrid(prims, primCount, {min, gridSize, voxelSize});
     int totalGridSize = gridSize[0] * gridSize[1] * gridSize[2];
     float* result = new float[(totalGridSize * 4) + 7];
     result[0] = min.x;
@@ -113,6 +133,8 @@ float* constructVoxelGrid(float* prims, int primCount, int size)
     memcpy(result + 3, gridSize, 3 * sizeof(int));
     result[6] = voxelSize;
     int offset = 7;
+    int xMultiplier = gridSize[1] * gridSize[2];
+    int yMultiplier = gridSize[2];
     for(int z = 0; z < gridSize[2]; z++)
     {
         for(int y = 0; y < gridSize[1]; y++)
@@ -131,6 +153,112 @@ float* constructVoxelGrid(float* prims, int primCount, int size)
         }
     }
     delete[] grid;
+    return result;
+}
+
+struct NodeStackElement
+{
+    SVO* node;
+    int parentIndex;
+};
+
+indexTriplet getSVOIndex(Vec3 point, Vec3 minPoint, float voxelSize)
+{
+    Vec3 offset = point - minPoint;
+    return {(int)std::floor(offset.x / voxelSize), (int)std::floor(offset.y / voxelSize), (int)std::floor(offset.z / voxelSize)};
+}
+
+float* constructSVO(float* prims, int primCount, int depth)
+{
+    Vec3 min(prims[0], prims[1], prims[2]);
+    Vec3 max = min;
+    for(int i = 1; i < primCount * 3; i++)
+    {
+        min.min(prims[i * 3 + 0], prims[i * 3 + 1], prims[i * 3 + 2]);
+        max.max(prims[i * 3 + 0], prims[i * 3 + 1], prims[i * 3 + 2]);
+    }
+    Vec3 extents = max - min;
+    float maxExtent = extents.maxComponent();
+    float svoSize = maxExtent;
+    for(int i = 0; i < depth; i++) svoSize /= 2.f;
+    min.sub(svoSize / 2);
+    max.add(svoSize / 2);
+    extents = max - min;
+    maxExtent = extents.maxComponent();
+    svoSize = maxExtent;
+    for(int i = 0; i < depth; i++) svoSize /= 2.f;
+    int size = std::round(maxExtent / svoSize);
+    max = min;
+    max.add(maxExtent);
+    Voxel* voxels = initGrid(prims, primCount, {min, new int[3]{size, size, size}, svoSize});
+    SVO root = SVO(min, max, depth);
+    int nodeCount = 1;
+    for(int x = 0; x < size; x++)
+    {
+        for(int y = 0; y < size; y++)
+        {
+            for(int z = 0; z < size; z++)
+            {
+                Voxel& vx = voxels[x * size * size + y * size + z];
+                if(vx.childCount == 0) continue;
+                Vec3 averageNormal = vx.normalSum / (float)vx.childCount;
+                Vec3 center = min + Vec3((x + 0.5f) * svoSize, (y + 0.5f) * svoSize, (z + 0.5f) * svoSize);
+                root.insertVoxel(center, averageNormal, &nodeCount);
+            }
+        }
+    }
+    delete[] voxels;
+    int offset = 8;
+    int resultSize = nodeCount * 4 + offset;
+    float* result = new float[resultSize];
+    result[0] = min.x;
+    result[1] = min.y;
+    result[2] = min.z;
+    result[3] = max.x;
+    result[4] = max.y;
+    result[5] = max.z;
+    memcpy(result + 6, &size, sizeof(int));
+    int currentNodeIndex = 0;
+    std::queue<NodeStackElement> nodeStack;
+    nodeStack.push({&root, -1});
+    while(!nodeStack.empty())
+    {
+        NodeStackElement stackElem = nodeStack.front();
+        nodeStack.pop();
+        int parentIndex = stackElem.parentIndex;
+        SVO* node = stackElem.node;
+        int childMask = 0;
+        for(int i = 0; i < 8; i++)
+        {
+            if(node->children[i] != nullptr)
+            {
+                childMask |= 1 << i;
+                nodeStack.push({node->children[i], currentNodeIndex});
+            }
+        }
+        int isLeaf = node->isLeaf ? (1 << 8) : 0;
+        Vec3 averageNormal = node->normal;
+        if(parentIndex != -1)
+        {
+            int childOffset = currentNodeIndex - parentIndex;
+            int shiftedIndex = (childOffset << 9);
+            int* parent = (int*)(result + parentIndex * 4 + offset);
+            int parentValue = *parent;
+            int parentChildOffset = parentValue >> 9;
+            if(parentChildOffset == 0)
+            {
+                parentValue |= shiftedIndex;
+                (*parent) = parentValue;
+            }
+        }
+        int packedBits = (childMask) | isLeaf;
+        memcpy(result + currentNodeIndex * 4 + offset, &packedBits, sizeof(int));
+        result[currentNodeIndex * 4 + 1 + offset] = averageNormal.x;
+        result[currentNodeIndex * 4 + 2 + offset] = averageNormal.y;
+        result[currentNodeIndex * 4 + 3 + offset] = averageNormal.z;
+        currentNodeIndex++;
+    }
+    memcpy(result + 7, &currentNodeIndex, sizeof(int));
     return result;
 }
 }
