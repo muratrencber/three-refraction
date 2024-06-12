@@ -163,7 +163,18 @@ export class TwoPassRefractionRenderer
         this.quadMaterial = new THREE.RawShaderMaterial({
             vertexShader: xbrUpscaleVertexGLSL.code,
             fragmentShader: xbrUpscaleFragmentGLSL.code,
-            glslVersion: THREE.GLSL3
+            glslVersion: THREE.GLSL3,
+            uniforms: {
+                lowResTextureSize: { value: [0,0] },
+                targetTextureSize: { value: [0,0] },
+                lowResTexture1: { value: null },
+                lowResTexture2: { value: null },
+                lowResTexture3: { value: null },
+                lowResTexture4: { value: null },
+                lowResTexture5: { value: null },
+                lowResTexture6: { value: null },
+                lowResTexture7: { value: null }
+            }
         });
         this.quadScene = new THREE.Scene();
         const quadGeometry = new THREE.PlaneGeometry(2, 2);
@@ -461,10 +472,39 @@ export class TwoPassRefractionRenderer
         this.beforeUpscaleRender(scene);
         if(!debugRendering)
         {
-            if(this.rendererOptions.upscaleOptions.upscaleMethod === UpscaleMethod.XBR)
+            /** @type {THREE.WebGLRenderTarget} */
+            let selectedLowResTarget = this.renderTarget;
+            if(this.rendererOptions.upscaleOptions.upscaleMethod === UpscaleMethod.XBR && this.xbrRenderTarget)
             {
-
+                this.quadMaterial.uniforms.lowResTextureSize.value = [this.lowResRenderSize.x, this.lowResRenderSize.y];
+                this.quadMaterial.uniforms.targetTextureSize.value = [this.xbrUpscaleSize.x, this.xbrUpscaleSize.y];
+                for(let i = 0; i < this.xbrRenderTarget.texture.length; i++)
+                {
+                    this.quadMaterial.uniforms[`lowResTexture${i + 1}`] = { value: this.renderTarget.textures[i] };
+                }
+                this.renderer.setRenderTarget(this.xbrRenderTarget);
+                this.renderer.setPixelRatio(this.xbrUpscaleSize.x / this.originalRenderSize.x);
+                this.renderer.clear();
+                this.renderer.render(this.quadScene, this.quadCamera);
+                selectedLowResTarget = this.xbrRenderTarget;
+                if(this.xbr4xRenderTarget)
+                {
+                    this.quadMaterial.uniforms.lowResTextureSize.value = [this.xbrUpscaleSize.x, this.xbrUpscaleSize.y];
+                    this.quadMaterial.uniforms.targetTextureSize.value = [this.xbr4xUpscaleSize.x, this.xbr4xUpscaleSize.y];
+                    for(let i = 0; i < this.xbr4xRenderTarget.texture.length; i++)
+                    {
+                        this.quadMaterial.uniforms[`lowResTexture${i + 1}`] = { value: this.xbrRenderTarget.textures[i] };
+                    }
+                    this.renderer.setRenderTarget(this.xbr4xRenderTarget);
+                    this.renderer.setPixelRatio(this.xbr4xUpscaleSize.x / this.originalRenderSize.x);
+                    this.renderer.clear();
+                    this.renderer.render(this.quadScene, this.quadCamera);
+                    selectedLowResTarget = this.xbr4xRenderTarget;
+                }
             }
+            this.upscaleMaterial.uniforms.lowResTexture.value = selectedLowResTarget.textures[0];
+            this.upscaleMaterial.uniforms.normalOrMask.value = selectedLowResTarget.textures[1];
+            this.upscaleMaterial.uniformsNeedUpdate = true;
             this.renderer.render(scene, camera);
         }
         else {
